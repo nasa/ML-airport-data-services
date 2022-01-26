@@ -4,9 +4,6 @@ def shouldBuild = true
 
 pipeline {
    agent any
-   environment {
-       PATH = "$PATH:$PIPELINE_SCRIPTS"
-   }
    parameters {
       choice(
          choices: ['patch', 'minor', 'major'],

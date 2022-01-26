@@ -2,14 +2,13 @@
 """
 
 """
-import os
+import os, logging, configparser, yaml, mlflow
 import pandas as pd
-from mlflow.tracking import MlflowClient
-import logging
-import configparser
+
 from typing import Any, Dict
-import yaml
-import mlflow
+from mlflow.tracking import MlflowClient
+from mlflow.tracking.artifact_utils import _download_artifact_from_uri
+from mlflow.store.artifact.models_artifact_repo import ModelsArtifactRepository
 
 # MLFLOW DEFAULTS
 TRACKING_URI = 'XXXXX'
@@ -245,3 +244,56 @@ def init_mlflow_run(
         active_run_id = active_run.info.run_id
 
     return active_run_id
+
+def download_artifact_from_model_uri(
+    model_uri: str, 
+    model_name: str,
+    airport: str, 
+    version: str,
+    artifact_download_location: str
+) -> str:
+    """
+    Parameters
+    ----------
+    model_uri : str
+        The location, in URI format, of the MLflow model, for example:
+            /Users/me/path/to/local/model
+            relative/path/to/local/model
+            s3://my_bucket/path/to/model
+            models:/<model_name>/<model_version>
+    model_name: str,
+        Name of the MLflow model
+    airport : str
+        ICAO airport code for the model
+    version : str
+        Version of the model
+    artifact_download_location: str
+        The root folder to download the MLflow models to.
+        It could be a relative path to the current repo or a global path, for example:
+            ./models
+            /casa/models
+
+    Returns
+    -------
+    local_path_to_model : str
+        Local system file path to the downloaded model
+    """
+    # use ModelsArtifactRepository to find registry uri as model uri starts with 'models:' scheme 
+    registry_uri = ModelsArtifactRepository.get_underlying_uri(model_uri)
+    logging.info(f"registry uri for {model_uri}: {registry_uri}")
+
+    # if using mlflow backed by s3, download the artifact to the output folder
+    if registry_uri.startswith('s3:'):
+        output_folder = os.path.join(artifact_download_location, f"{model_name}_{airport}", version)
+        # use existing model if it's already on the system
+        if os.path.exists(f"{output_folder}/model.pkl"):
+            logging.info(f"using the existing {model_uri} in {output_folder}")
+            local_path_to_model = output_folder
+        else:
+            os.makedirs(output_folder, exist_ok=True)
+            logging.info(f"downloading {model_uri} from s3 to {output_folder}")
+            local_path_to_model = _download_artifact_from_uri(model_uri, output_folder)
+    else:
+        local_path_to_model = registry_uri
+
+    return local_path_to_model

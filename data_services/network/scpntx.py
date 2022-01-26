@@ -67,6 +67,12 @@ def copy_artifacts_to_ntx(
         auth_timeout = ntx_connection['auth_timeout']
     else :
         auth_timeout = 60
+
+    if ('socket_timeout' in ntx_connection.keys()):
+        socket_timeout = ntx_connection['socket_timeout']
+    else :
+        socket_timeout = 60
+
     
     with paramiko.SSHClient() as ssh:
         ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy)
@@ -111,7 +117,7 @@ def copy_artifacts_to_ntx(
                 _mkdir_p(sftp, to_path)
 
         # Copy subdirectories over
-        with SCPClient(ssh.get_transport()) as scp:
+        with SCPClient(ssh.get_transport(), socket_timeout = socket_timeout) as scp:
             for run_id in run_ids:
                 from_path = "/casa/mlruns/{}/{}".format(
                     experiment_id,

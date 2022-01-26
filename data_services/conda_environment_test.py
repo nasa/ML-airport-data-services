@@ -15,11 +15,15 @@ def convert_conda_yaml_to_requirement(conda_array) :
        - transform = into ==
        - add pip packages dependencies to the list of other dependencies
     Additionally remove python requirement (not supported by pkg_resources.require)
+    Also need to remove pip -e "install"
     '''
     # get dependencies
     dep_array = [v for v in conda_array["dependencies"] if type(v) == str] 
     pip_require = [v for v in conda_array["dependencies"]
-                   if type(v) == dict and "pip" in v.keys()][0]["pip"] 
+                   if type(v) == dict and "pip" in v.keys()][0]["pip"]
+    # remove " -e  " install type :
+    pip_require = [v for v in pip_require if (re.match(r"^ *-e ",v) == None)]
+    
     # need to add extra = if no < or >
     dep_array_conv = [x.replace('=','==') for x in dep_array]
     dep_array_conv = [x.replace(r'>==','>=').replace('<==','<=').replace('===','==')

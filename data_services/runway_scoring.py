@@ -222,7 +222,7 @@ def score_models(
                  })
              ),
             y_pred_test,
-            model.default_response,
+            model._default_response,
             airport_name,
             "Test",
             )
@@ -237,7 +237,7 @@ def score_models(
                  })
              ),
             y_pred_train,
-            model.default_response,
+            model._default_response,
             airport_name,
             "Training",
             )
@@ -524,7 +524,9 @@ def _accuracy_over_time(
         X
         .join(y_pred)
         )
-    df["pred"] = df["pred"].fillna(y_default)
+    # default response can return an array, but fillna can take scalar or indexed list like Serie
+    # should work unless pred is not scalar quantity and df has only 1 element
+    df["pred"] = df["pred"].fillna(pd.Series(y_default(X), index=df.index)) 
     df["correct"] = (df["pred"] == df["actual"])
     df["bin"] = bin_size*np.floor(df["lookahead"]/bin_size)
 

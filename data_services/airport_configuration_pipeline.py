@@ -27,7 +27,7 @@ def airport_configuration_pipeline(
     compass_speed = CompassSpeed(lookaheads)
 
     configurations= pd.unique(data.airport_configuration_name_current)
-    airport_configuration_encoder = AirportConfigurationEncoder(configurations,  has_encoder('airport_configuration_encoder', features))
+    airport_configuration_encoder = AirportConfigurationEncoder(configurations)
 
     # Build one-hot encoder for general categorical features
     oh_enc = OneHotEncoder(

@@ -36,7 +36,7 @@ class FilterPipeline(Pipeline):
         default_response : Any
             Default response to return when a row does not satisfy all
                 filtering rules, with type consistent with output of
-                core_pipeline
+                core_pipeline or function called with default_response(X)
         default_score_behavior : str, optional, default "all"
             Default mode that .score() method should employ.
             Under mode "all", include all rows in the score, including those
@@ -65,6 +65,14 @@ class FilterPipeline(Pipeline):
             self.steps = self.core_pipeline.steps
 
         self.rules = rules
+
+        
+    def _default_response(self, features) :
+        if callable(self.default_response) :
+            return self.default_response(features)
+        else :
+            return self.default_response
+       
 
     def _add_rule(
             self,
@@ -518,6 +526,7 @@ class FilterPipeline(Pipeline):
         #   and in the same order.
         X_new_index = X.reset_index(drop=True)
         [good_obs, error_msgs] = self._filter(X_new_index)
+        empty_serie = pd.Series([self._default_response(X_new_index.iloc[0:1])]).iloc[0:0]
 
         # Generate predictions for rows satisfying all filtering rules
         if any(good_obs):
@@ -526,27 +535,32 @@ class FilterPipeline(Pipeline):
                 index=X_new_index[good_obs].index,
             )
         else:
-            real_preds = pd.Series(
-                dtype=type(self.default_response),
-                index=X_new_index[good_obs].index,
-            )
+            real_preds = empty_serie
 
         # Add back rows previously filtered out, and fill them in with the
-        #   default value
-        preds = (
-            real_preds
-            .reindex(
-                index=X_new_index.index,
-                fill_value=self.default_response,
-                )
-                .values
-            )
+        #   default value, need np.ravel in case just 1 element of dict type
+        if (good_obs.all()) :
+            not_real_preds = empty_serie
+        else :
+            # _default_response return a single instance if it is a constant
+            # or if a function called when only 1 bad values
+            default_values = self._default_response(X_new_index[~good_obs])
+            n_values = (~good_obs).sum()
+            # duplicate values is not always necessary but could be if the prediction is not scalar
+            if ( (n_values == 1) or not(callable(self.default_response))) :
+                default_values = [default_values]*n_values
+            not_real_preds = pd.Series(default_values, index = X_new_index[~good_obs].index)
+
+
+        preds = pd.concat((real_preds,
+                           not_real_preds)
+                          ).sort_index().values
 
         # Check rules on preds and replace with default value as needed
         good_preds, error_msgs_preds = self._filter_preds(preds)
         idx_bad_real_preds = good_obs & (~good_preds)
 
-        preds[idx_bad_real_preds] = self.default_response
+        preds[idx_bad_real_preds] = self._default_response(X_new_index[idx_bad_real_preds])
         error_msgs[idx_bad_real_preds] = error_msgs_preds[idx_bad_real_preds]
 
         return preds, error_msgs.values
@@ -647,8 +661,14 @@ class FilterPipeline(Pipeline):
                 )
             )
 
-        if (self.default_response in preds.columns):
-            preds.loc[~good_obs, self.default_response] = 1.0
+        not_real_preds = pd.Series(self._default_response(X_new_index[~good_obs]),
+                                   index=X_new_index[~good_obs].index)
+        if (not_real_preds.isin(preds.columns).all()) :
+            stack_preds = preds.stack()
+            stack_preds.loc[zip(not_real_preds.index,
+                                not_real_preds
+                                )] = 1.0
+            preds = stack_preds.unstack()
         else:
             print("WARNING: FilterPipeline default_response not in set of known targets")
 
